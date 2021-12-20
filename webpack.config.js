@@ -1,4 +1,5 @@
 const Encore = require('@symfony/webpack-encore');
+const path = require("path");
 
 // Manually configure the runtime environment if not already configured yet by the "encore" command.
 // It's useful when you use tools that rely on webpack.config.js file.
@@ -10,9 +11,9 @@ Encore
     // directory where compiled assets will be stored
     .setOutputPath('public/build/')
     // public path used by the web server to access the output path
-    .setPublicPath('/build')
+    .setPublicPath((process.env.BASE_URL || '') + '/build')
     // only needed for CDN's or sub-directory deploy
-    //.setManifestKeyPrefix('build/')
+    .setManifestKeyPrefix('build/')
 
     /*
      * ENTRY CONFIG
@@ -54,6 +55,34 @@ Encore
 
     .enableVueLoader()
 
+    .configureDevServerOptions(options => {
+        options.allowedHosts = 'all';
+        options.host         = '0.0.0.0';
+
+        options.client = {
+            overlay: {
+                errors: true,
+                warnings: false,
+            },
+        };
+
+        options.devMiddleware = {
+            // index: false,
+            writeToDisk:true
+        };
+
+        options.https = {
+            key: path.resolve(process.env.SSL_KEY),
+            cert: path.resolve(process.env.SSL_CERT),
+        }
+    })
+
+    .configureWatchOptions(watchOptions => {
+        watchOptions.aggregateTimeout = 1000; // delay before reloading
+        watchOptions.poll = 250; // check for changes every 250 milliseconds
+        watchOptions.ignored = /node_modules/;
+    })
+
     // enables Sass/SCSS support
     //.enableSassLoader()
 
@@ -70,5 +99,7 @@ Encore
     // uncomment if you're having problems with a jQuery plugin
     //.autoProvidejQuery()
 ;
+
+    console.log(Encore.getWebpackConfig());
 
 module.exports = Encore.getWebpackConfig();

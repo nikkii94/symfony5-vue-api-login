@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  nginx:
+    build:
+      context: docker/nginx
+      dockerfile: Dockerfile
+    image: nginx:1.21-alpine
+    container_name: nginx-container-sf5-api
+    ports:
+      - "8080:8080"
+      - "443:443"
+    volumes:
+      - .:${PROJECT_ROOT}
+      - ./public:${PROJECT_ROOT}/public
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - ./docker/nginx/conf/default_template.conf:/etc/nginx/conf.d/default.template
+      - ./certs:/etc/nginx/certs
+      - ./var/log:/var/log/nginx
+    env_file:
+      - .env
+    depends_on:
+      - php8
+    command: /bin/bash -c "envsubst '$$NGINX_HOST $$PROJECT_ROOT'
+      < /etc/nginx/conf.d/default.template
+      > /etc/nginx/conf.d/default.conf
+      && exec nginx -g 'daemon off;'"
+    networks:
+      - sf5-api-nginx-php8-mysql8-node
+
+  php8:
+    build:
+      context: ./docker/php
+      args:
+        PHP_VERSION: 8.0
+        PROJECT_ROOT: ${PROJECT_ROOT}
+    container_name: php8-container-sf5-api
+    env_file:
+      - .env
+    volumes:
+      - .:${PROJECT_ROOT}:rw,cached
+      - ./certs:/etc/certs
+    depends_on:
+      - mysql
+    ports:
+      - "5005:5005"
+    networks:
+      - sf5-api-nginx-php8-mysql8-node
+
+  mysql:
+    image: mysql:8.0
+    container_name: mysql8-container-sf5-api
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    restart: always
+    volumes:
+      - ./data:/var/lib/mysql
+    environment:
+        MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+        MYSQL_USER: admin
+        MYSQL_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "33062:3306"
+    networks:
+      - sf5-api-nginx-php8-mysql8-node
+
+  encore:
+    image: node:14.10-alpine
+    container_name: node-container-sf5-api
+    volumes:
+      - ".:${PROJECT_ROOT}:rw,consistent" #:consistent
+      - "./certs:/etc/certs"
+    working_dir: "${PROJECT_ROOT}"
+    env_file:
+      - .env
+    # for webpack-encore v1, "--disable-host-check" is replaced with "--firewall false"
+    command: >
+      sh -c "yarn encore dev-server --host 0.0.0.0 --port 9998 --hot"
+    #            sh -c "npx webpack-serve"
+    ports:
+      - "9998:9998"
+    depends_on:
+      - php8
+    networks:
+      - sf5-api-nginx-php8-mysql8-node
+
+volumes:
+  log.nginx:
+
+networks:
+  sf5-api-nginx-php8-mysql8-node:
